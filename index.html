@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#faf8ef">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>2048</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap">
+<style>
+/* Layout: one centred column sized off the board width (--W), proportions measured from the reference screenshot. Single light theme by design. */
+:root {
+  --bg: #faf8ef;          /* page */
+  --ink: #776e65;         /* title, dark tile text */
+  --board: #bbada0;       /* board, score boxes, buttons */
+  --cell: #d6cdc4;        /* empty cell, score labels */
+  --light: #f9f6f2;       /* light text, icons */
+  --gold: #edcf72;        /* refresh button, win veil */
+  --veil-win: rgba(237, 207, 114, 0.5);
+  --veil-over: rgba(238, 228, 218, 0.73);
+  --font: 'Roboto', system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+
+  --W: min(calc(100vw - 40px), 420px);
+  --g: calc(var(--W) * 0.0221);
+  --cs: calc((var(--W) - 5 * var(--g)) / 4);
+  --rad: calc(var(--W) * 0.0106);
+  color-scheme: light;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  margin: 0;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.col { width: var(--W); display: flex; flex-direction: column; gap: calc(var(--W) * 0.036); }
+
+/* Row 1: title + scores */
+.head { display: flex; align-items: center; justify-content: space-between; height: calc(var(--W) * 0.150); }
+h1 {
+  margin: 0;
+  font-weight: 400;
+  font-size: calc(var(--W) * 0.1467);
+  line-height: 1;
+  color: var(--ink);
+  letter-spacing: -0.005em;
+}
+.scores { display: flex; gap: calc(var(--W) * 0.023); height: 100%; }
+.box {
+  background: var(--board);
+  border-radius: var(--rad);
+  padding-inline: calc(var(--W) * 0.022);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: calc(var(--W) * 0.004);
+  box-sizing: border-box;
+}
+.box.s { min-width: calc(var(--W) * 0.226); }
+.box.h { min-width: calc(var(--W) * 0.263); }
+.box .lb { font-size: calc(var(--W) * 0.037); color: var(--cell); line-height: 1.1; letter-spacing: 0.01em; text-transform: uppercase; }
+.box .vl { font-size: calc(var(--W) * 0.064); color: var(--light); line-height: 1.1; font-variant-numeric: tabular-nums; }
+
+/* Row 2: buttons */
+.bar { display: flex; justify-content: space-between; align-items: center; }
+.bar .right { display: flex; gap: calc(var(--W) * 0.0735); }
+.btn {
+  position: relative;
+  width: calc(var(--W) * 0.1104); height: calc(var(--W) * 0.1104);
+  border: 0; padding: 0; margin: 0;
+  border-radius: var(--rad);
+  background: var(--board);
+  display: grid; place-items: center;
+  cursor: pointer;
+  transition: opacity .15s, transform .08s;
+}
+.btn:active { transform: scale(0.94); }
+.btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.btn svg { width: 56%; height: 56%; display: block; }
+.btn.gold { background: var(--gold); }
+.btn[disabled] { opacity: 0.45; cursor: default; }
+.btn .badge {
+  position: absolute; right: calc(var(--W) * 0.008); bottom: calc(var(--W) * 0.004);
+  font-size: calc(var(--W) * 0.028); color: var(--light); line-height: 1; font-weight: 500;
+}
+
+/* Board */
+.board {
+  position: relative;
+  width: var(--W); height: var(--W);
+  background: var(--board);
+  border-radius: var(--rad);
+  box-sizing: border-box;
+}
+.grid {
+  position: absolute; inset: 0; padding: var(--g);
+  display: grid; grid-template-columns: repeat(4, var(--cs)); grid-template-rows: repeat(4, var(--cs)); gap: var(--g);
+}
+.grid div { background: var(--cell); border-radius: calc(var(--rad) * 0.75); }
+.tiles { position: absolute; inset: 0; }
+.tile {
+  position: absolute;
+  width: var(--cs); height: var(--cs);
+  left: calc(var(--g) + var(--c) * (var(--cs) + var(--g)));
+  top: calc(var(--g) + var(--r) * (var(--cs) + var(--g)));
+  transition: left .1s ease-in-out, top .1s ease-in-out;
+  z-index: 1;
+}
+.tile .ti {
+  width: 100%; height: 100%;
+  border-radius: calc(var(--rad) * 0.75);
+  display: grid; place-items: center;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.tile.new .ti { animation: appear .2s ease both; }
+.tile.merged { z-index: 2; }
+.tile.merged .ti { animation: pop .2s ease both; }
+@keyframes appear { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: scale(1); } }
+@keyframes pop { 0% { transform: scale(0); } 50% { transform: scale(1.18); } 100% { transform: scale(1); } }
+
+/* Overlays live on the board */
+.ov {
+  position: absolute; inset: 0; z-index: 5;
+  border-radius: var(--rad);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center;
+  animation: fade .4s ease both;
+  cursor: pointer;
+}
+@keyframes fade { from { opacity: 0; } }
+.ov.win { background: var(--veil-win); color: var(--light); }
+.ov.over { background: var(--veil-over); color: var(--ink); }
+.ov .big { font-size: calc(var(--W) * 0.128); line-height: 1.15; }
+.ov .small { font-size: calc(var(--W) * 0.072); line-height: 1.2; margin-top: calc(var(--W) * 0.035); }
+.ov.win .stack, .ov.over .stack { transform: translateY(calc(var(--W) * 0.066)); }
+.ov.panel { background: rgba(250, 248, 239, 0.94); color: var(--ink); cursor: default; padding: calc(var(--W) * 0.07); box-sizing: border-box; }
+.panel h2 { margin: 0 0 calc(var(--W) * 0.03); font-weight: 500; font-size: calc(var(--W) * 0.07); }
+.panel p { margin: 0 0 calc(var(--W) * 0.022); font-size: calc(var(--W) * 0.041); line-height: 1.45; max-width: 30ch; }
+.panel .acts { display: flex; gap: calc(var(--W) * 0.03); margin-top: calc(var(--W) * 0.03); }
+.panel .acts button {
+  font: inherit; font-size: calc(var(--W) * 0.042); font-weight: 500;
+  border: 0; border-radius: var(--rad); cursor: pointer;
+  padding: calc(var(--W) * 0.025) calc(var(--W) * 0.05);
+  background: var(--board); color: var(--light);
+}
+.panel .acts button.primary { background: var(--gold); color: var(--light); }
+.panel .acts button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .tile { transition: none; }
+  .tile .ti, .ov { animation: none !important; }
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="col">
+    <div class="head">
+      <h1>2048</h1>
+      <div class="scores">
+        <div class="box s"><div class="lb">Score</div><div class="vl" id="score">0</div></div>
+        <div class="box h"><div class="lb">High Score</div><div class="vl" id="best">0</div></div>
+      </div>
+    </div>
+
+    <div class="bar">
+      <button class="btn" id="homeBtn" aria-label="Home">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#f9f6f2" d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+      </button>
+      <div class="right">
+        <button class="btn" id="undoBtn" aria-label="Undo">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6.6 7.6A7.6 7.6 0 1 1 5 15.2" fill="none" stroke="#f9f6f2" stroke-width="2.8" stroke-linecap="round"/>
+            <path d="M2.6 3.8 L3.2 11.2 L10.3 9.3 Z" fill="#f9f6f2"/>
+          </svg>
+          <span class="badge" id="undoCount">3</span>
+        </button>
+        <button class="btn gold" id="newBtn" aria-label="New game">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4.6 10.6A7.6 7.6 0 0 1 17.4 6.6" fill="none" stroke="#f9f6f2" stroke-width="2.8" stroke-linecap="round"/>
+            <path d="M20.7 3.2 L20.9 10.4 L13.9 9.6 Z" fill="#f9f6f2"/>
+            <path d="M19.4 13.4A7.6 7.6 0 0 1 6.6 17.4" fill="none" stroke="#f9f6f2" stroke-width="2.8" stroke-linecap="round"/>
+            <path d="M3.3 20.8 L3.1 13.6 L10.1 14.4 Z" fill="#f9f6f2"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="board" id="board">
+      <div class="grid" aria-hidden="true">
+        <div></div><div></div><div></div><div></div>
+        <div></div><div></div><div></div><div></div>
+        <div></div><div></div><div></div><div></div>
+        <div></div><div></div><div></div><div></div>
+      </div>
+      <div class="tiles" id="tiles"></div>
+
+      <div class="ov win" id="winOv" hidden>
+        <div class="stack"><div class="big">You Win!</div><div class="small">Tap to Continue</div></div>
+      </div>
+      <div class="ov over" id="overOv" hidden>
+        <div class="stack"><div class="big">Game Over!</div><div class="small" id="overHint">Tap to Try Again</div></div>
+      </div>
+      <div class="ov panel" id="confirmOv" hidden>
+        <h2>Start a new game?</h2>
+        <p>Your current board and score will be cleared. The high score stays.</p>
+        <div class="acts">
+          <button id="cancelNew">Keep playing</button>
+          <button class="primary" id="confirmNew">New game</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var SIZE = 4, MAX_UNDO = 3, KEY = 'game2048.state.v1', SLIDE_MS = 100;
+
+  // Classic palette 2 → 2048; colours verified against the screenshot.
+  var PALETTE = {
+    2: '#eee4da', 4: '#ede0c8', 8: '#f2b179', 16: '#f59563', 32: '#f67c5f',
+    64: '#f65e3b', 128: '#edcf72', 256: '#edcc61', 512: '#edc850', 1024: '#edc53f', 2048: '#edc22e'
+  };
+  function tileBg(v) {
+    if (PALETTE[v]) return PALETTE[v];
+    // Beyond 2048: start at near-black and get darker with every doubling.
+    var k = Math.round(Math.log2(v)) - 11;           // 4096 → 1
+    var f = Math.pow(0.8, k - 1);
+    var r = Math.round(60 * f), g = Math.round(58 * f), b = Math.round(50 * f);
+    return 'rgb(' + r + ',' + g + ',' + b + ')';
+  }
+  function tileFg(v) { return v <= 4 ? '#776e65' : '#f9f6f2'; }
+  function tileSize(v) {
+    var d = String(v).length;
+    var k = d <= 2 ? 0.1016 : d === 3 ? 0.092 : d === 4 ? 0.081 : d === 5 ? 0.068 : d === 6 ? 0.058 : 0.05;
+    return 'calc(var(--W) * ' + k + ')';
+  }
+
+  var S;          // game state
+  var pending = null;   // animation in flight
+
+  function freshState(best) {
+    return { tiles: [], score: 0, best: best || 0, won: false, overlay: null, history: [], nextId: 1 };
+  }
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {}
+  }
+  function validTiles(t) {
+    if (!Array.isArray(t)) return false;
+    var seen = {};
+    for (var i = 0; i < t.length; i++) {
+      var x = t[i];
+      if (!x || typeof x.v !== 'number' || x.v < 2 || x.r < 0 || x.r > 3 || x.c < 0 || x.c > 3) return false;
+      var key = x.r + ',' + x.c; if (seen[key]) return false; seen[key] = 1;
+    }
+    return true;
+  }
+  function load() {
+    try {
+      var raw = localStorage.getItem(KEY);
+      if (!raw) return null;
+      var s = JSON.parse(raw);
+      if (!s || !validTiles(s.tiles) || typeof s.score !== 'number') return null;
+      s.history = Array.isArray(s.history) ? s.history.filter(function (h) { return h && validTiles(h.tiles); }).slice(-MAX_UNDO) : [];
+      s.best = Math.max(s.best || 0, s.score);
+      s.won = !!s.won;
+      s.overlay = s.overlay === 'win' || s.overlay === 'over' ? s.overlay : null;
+      // reassign ids so they are unique and sane
+      var id = 1; s.tiles = s.tiles.map(function (t) { return { id: id++, v: t.v, r: t.r, c: t.c }; });
+      s.nextId = id;
+      return s;
+    } catch (e) { return null; }
+  }
+
+  function emptyCells() {
+    var occ = {}; S.tiles.forEach(function (t) { occ[t.r * SIZE + t.c] = 1; });
+    var out = []; for (var i = 0; i < SIZE * SIZE; i++) if (!occ[i]) out.push(i);
+    return out;
+  }
+  function spawn() {
+    var e = emptyCells(); if (!e.length) return null;
+    var idx = e[Math.floor(Math.random() * e.length)];
+    var t = { id: S.nextId++, v: Math.random() < 0.9 ? 2 : 4, r: Math.floor(idx / SIZE), c: idx % SIZE };
+    S.tiles.push(t); return t;
+  }
+  function canMove() {
+    if (S.tiles.length < SIZE * SIZE) return true;
+    var g = {}; S.tiles.forEach(function (t) { g[t.r * SIZE + t.c] = t.v; });
+    for (var r = 0; r < SIZE; r++) for (var c = 0; c < SIZE; c++) {
+      var v = g[r * SIZE + c];
+      if (c < SIZE - 1 && g[r * SIZE + c + 1] === v) return true;
+      if (r < SIZE - 1 && g[(r + 1) * SIZE + c] === v) return true;
+    }
+    return false;
+  }
+  function lineCells(dir, i) {
+    var out = [];
+    for (var k = 0; k < SIZE; k++) {
+      if (dir === 'left') out.push([i, k]);
+      else if (dir === 'right') out.push([i, SIZE - 1 - k]);
+      else if (dir === 'up') out.push([k, i]);
+      else out.push([SIZE - 1 - k, i]);
+    }
+    return out;
+  }
+
+  function newGame() {
+    finishAnim();
+    var best = S ? S.best : 0;
+    S = freshState(best);
+    spawn(); spawn();
+    save(); renderAll(true);
+  }
+
+  function move(dir) {
+    if (S.overlay || panelOpen()) return;
+    finishAnim();
+    var grid = {}; S.tiles.forEach(function (t) { grid[t.r * SIZE + t.c] = t; });
+    var newTiles = [], slides = [], removes = [], born = {}, gained = 0, moved = false;
+
+    for (var i = 0; i < SIZE; i++) {
+      var cells = lineCells(dir, i), placed = [];
+      cells.forEach(function (p) {
+        var t = grid[p[0] * SIZE + p[1]]; if (!t) return;
+        var top = placed[placed.length - 1];
+        if (top && !top.merged && top.t.v === t.v) { top.merged = true; top.partner = t; }
+        else placed.push({ t: t, merged: false });
+      });
+      placed.forEach(function (e, k) {
+        var r = cells[k][0], c = cells[k][1];
+        if (e.t.r !== r || e.t.c !== c) moved = true;
+        slides.push({ id: e.t.id, r: r, c: c });
+        if (e.merged) {
+          moved = true;
+          slides.push({ id: e.partner.id, r: r, c: c });
+          var nt = { id: S.nextId++, v: e.t.v * 2, r: r, c: c };
+          newTiles.push(nt); born[nt.id] = 'merged'; gained += nt.v;
+          removes.push(e.t.id, e.partner.id);
+        } else {
+          newTiles.push({ id: e.t.id, v: e.t.v, r: r, c: c });
+        }
+      });
+    }
+    if (!moved) return;
+
+    S.history.push({ tiles: S.tiles.map(function (t) { return { v: t.v, r: t.r, c: t.c }; }), score: S.score });
+    if (S.history.length > MAX_UNDO) S.history.shift();
+
+    S.tiles = newTiles;
+    S.score += gained;
+    S.best = Math.max(S.best, S.score);
+    var sp = spawn(); if (sp) born[sp.id] = 'new';
+
+    if (!S.won && S.tiles.some(function (t) { return t.v >= 2048; })) { S.won = true; S.overlay = 'win'; }
+    else if (!canMove()) S.overlay = 'over';
+
+    save();
+    animate(slides, born);
+  }
+
+  function undo() {
+    if (!S.history.length) return;
+    finishAnim();
+    var snap = S.history.pop();
+    S.tiles = snap.tiles.map(function (t) { return { id: S.nextId++, v: t.v, r: t.r, c: t.c }; });
+    S.score = snap.score;
+    S.overlay = null;          // `won` stays true, so the banner never repeats
+    save(); renderAll(false);
+  }
+
+  function continueAfterWin() {
+    S.overlay = canMove() ? null : 'over';
+    save(); renderOverlays();
+  }
+
+  /* ---------- rendering ---------- */
+  var tilesEl = document.getElementById('tiles');
+  var els = new Map();
+
+  function makeTile(t, cls) {
+    var el = document.createElement('div');
+    el.className = 'tile' + (cls ? ' ' + cls : '');
+    el.style.setProperty('--r', t.r); el.style.setProperty('--c', t.c);
+    var inner = document.createElement('div');
+    inner.className = 'ti';
+    inner.textContent = t.v;
+    inner.style.background = tileBg(t.v);
+    inner.style.color = tileFg(t.v);
+    inner.style.fontSize = tileSize(t.v);
+    el.appendChild(inner);
+    tilesEl.appendChild(el);
+    els.set(t.id, el);
+  }
+  function renderAll(appear) {
+    tilesEl.textContent = ''; els.clear();
+    S.tiles.forEach(function (t) { makeTile(t, appear ? 'new' : ''); });
+    renderMeta(); renderOverlays();
+  }
+  function renderMeta() {
+    document.getElementById('score').textContent = S.score;
+    document.getElementById('best').textContent = S.best;
+    var n = S.history.length;
+    var ub = document.getElementById('undoBtn');
+    ub.disabled = n === 0;
+    document.getElementById('undoCount').textContent = n;
+    ub.setAttribute('aria-label', 'Undo (' + n + ' left)');
+  }
+  function renderOverlays() {
+    document.getElementById('winOv').hidden = S.overlay !== 'win';
+    document.getElementById('overOv').hidden = S.overlay !== 'over';
+    document.getElementById('overHint').textContent = S.history.length ? 'Tap to Undo' : 'Tap to Try Again';
+    renderMeta();
+  }
+  function animate(slides, born) {
+    slides.forEach(function (s) {
+      var el = els.get(s.id); if (!el) return;
+      el.style.setProperty('--r', s.r); el.style.setProperty('--c', s.c);
+    });
+    renderMeta();
+    pending = { born: born, timer: setTimeout(finishAnim, SLIDE_MS) };
+  }
+  function finishAnim() {
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    var born = pending.born; pending = null;
+    var live = {}; S.tiles.forEach(function (t) { live[t.id] = 1; });
+    els.forEach(function (el, id) { if (!live[id]) { el.remove(); els.delete(id); } });
+    S.tiles.forEach(function (t) {
+      var el = els.get(t.id);
+      if (!el) makeTile(t, born[t.id] || '');
+      else { el.style.setProperty('--r', t.r); el.style.setProperty('--c', t.c); }
+    });
+    renderOverlays();
+  }
+
+  /* ---------- panels ---------- */
+  var confirmOv = document.getElementById('confirmOv');
+  function panelOpen() { return !confirmOv.hidden; }
+
+  document.getElementById('newBtn').addEventListener('click', function () { confirmOv.hidden = false; });
+  document.getElementById('cancelNew').addEventListener('click', function () { confirmOv.hidden = true; });
+  document.getElementById('confirmNew').addEventListener('click', function () { confirmOv.hidden = true; newGame(); });
+  document.getElementById('undoBtn').addEventListener('click', function () { if (!panelOpen()) undo(); });
+  document.getElementById('winOv').addEventListener('click', continueAfterWin);
+  document.getElementById('overOv').addEventListener('click', function () {
+    if (S.history.length) undo(); else { confirmOv.hidden = true; newGame(); }
+  });
+
+  /* ---------- input ---------- */
+  var KEYS = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down',
+               a: 'left', d: 'right', w: 'up', s: 'down', A: 'left', D: 'right', W: 'up', S: 'down' };
+  document.addEventListener('keydown', function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === 'Escape') { confirmOv.hidden = true; return; }
+    if ((e.key === 'z' || e.key === 'u') && !panelOpen()) { undo(); return; }
+    var d = KEYS[e.key]; if (!d) return;
+    e.preventDefault(); move(d);
+  });
+
+  var start = null;
+  document.addEventListener('pointerdown', function (e) {
+    if (e.target.closest('button') || e.target.closest('.panel')) { start = null; return; }
+    start = { x: e.clientX, y: e.clientY, id: e.pointerId };
+  });
+  document.addEventListener('pointerup', function (e) {
+    if (!start || e.pointerId !== start.id) return;
+    var dx = e.clientX - start.x, dy = e.clientY - start.y; start = null;
+    var ax = Math.abs(dx), ay = Math.abs(dy);
+    if (Math.max(ax, ay) < 24) return;
+    move(ax > ay ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'));
+  });
+  document.addEventListener('pointercancel', function () { start = null; });
+  document.addEventListener('touchmove', function (e) { if (!e.target.closest('.panel')) e.preventDefault(); }, { passive: false });
+
+  /* ---------- boot ---------- */
+  S = load();
+  if (S) renderAll(false); else { S = freshState(0); newGame(); }
+})();
+</script>
+</body>
+</html>
